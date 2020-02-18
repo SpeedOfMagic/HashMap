@@ -1,10 +1,10 @@
 /**Copyright 2020 Daniil Vasilev (c)**/
+#pragma once
+
 #include <list>
 #include <stdexcept>
 #include <utility>
 #include <vector>
-
-#pragma once
 
 using std::list;
 using std::pair;
@@ -14,13 +14,14 @@ template<class KeyType, class ValueType, class Hash = std::hash<KeyType>>
 class HashMap {
  public:
     struct Node {
-        pair<const KeyType, ValueType> p;
-        typename list<Node*>::iterator ptr;
+        pair<const KeyType, ValueType> key_val;
+        typename list<Node*>::iterator iterator_to_pointer;
 
-        explicit Node(const pair<const KeyType, ValueType>& _p) : p(_p) {}
+        explicit Node(const pair<const KeyType, ValueType>& p) : key_val(p) {}
 
-        bool operator==(const Node& n) const {
-            return p == n.p && ptr == n.ptr;
+        bool operator==(const Node& other) const {
+            return key_val == other.key_val &&
+                   iterator_to_pointer == other.iterator_to_pointer;
         }
     };
 
@@ -28,12 +29,13 @@ class HashMap {
     vector<list<Node>> container;
     list<Node*> pointers;
     Hash hash;
-    size_t Size = 0, Capacity = 0;
+    size_t _size = 0, capacity = 0;
 
  public:
     explicit HashMap(const Hash& h = Hash()) : hash(h) {}
-    explicit HashMap(const HashMap& hm) : hash(hm.hash_function()) {
-        for (const auto& i : hm)
+
+    HashMap(const HashMap& other) : hash(other.hash_function()) {
+        for (const auto& i : other)
             insert(i);
     }
 
@@ -43,65 +45,68 @@ class HashMap {
             insert(*begin);
     }
 
-    HashMap(std::initializer_list<pair<const KeyType, ValueType>> l,
+    HashMap(std::initializer_list<pair<const KeyType, ValueType>> list,
             const Hash& h = Hash()) : hash(h) {
-        for (const auto& i : l)
-            insert(i);
+        for (const auto& pair : list)
+            insert(pair);
     }
 
-    const HashMap& operator=(const HashMap& hm) {
-        if (container == hm.container)
+    HashMap& operator=(const HashMap& other) {
+        if (this == &other)
             return *this;
         clear();
-        hash = hm.hash_function();
-        for (const auto& i : hm)
-            insert(i);
+        hash = other.hash_function();
+        for (const auto& pair : other)
+            insert(pair);
         return *this;
     }
 
-    size_t size() const noexcept { return Size; }
-    bool empty() const noexcept { return size() == 0; }
-    Hash hash_function() const noexcept { return hash; }
+    size_t size() const noexcept { return _size; }
 
-    size_t h(const KeyType& key) const noexcept {
-        return hash(key) % Capacity;
+    bool empty() const noexcept { return size() == 0; }
+
+    Hash hash_function() const { return hash; }
+
+    size_t get_bucket_index(const KeyType& key) const {
+        return hash(key) % capacity;
     }
 
-    void insert(const pair<const KeyType, ValueType>& p) {
-        if (find(p.first) == end()) {
-            if (Size == Capacity) {
-                vector<pair<const KeyType, ValueType>> allPairs;
-                allPairs.reserve(size() + 1);
-                for (auto i = begin(); i != end(); ++i)
-                    allPairs.push_back(*i);
-                allPairs.push_back(p);
-                clear();
-                Capacity = Capacity ? (Capacity << 1) : 1;
-                container.resize(Capacity);
-                for (const auto& i : allPairs)
-                    insert(i);
-            } else {
-                size_t cell = h(p.first);
-                container[cell].push_back(Node(p));
-                pointers.push_back(&container[cell].back());
-                auto d = pointers.end();
-                container[cell].back().ptr = --d;
-                ++Size;
-            }
+    void insert(const pair<const KeyType, ValueType>& key_val) {
+        if (find(key_val.first) != end())
+            return;
+        if (size() == capacity) {
+            vector<pair<const KeyType, ValueType>> allPairs;
+            allPairs.reserve(size() + 1);
+            for (auto i = begin(); i != end(); ++i)
+                allPairs.push_back(*i);
+            allPairs.push_back(key_val);
+            clear();
+            capacity = capacity ? (capacity << 1) : 1;
+            container.resize(capacity);
+            for (const auto& pair : allPairs)
+                insert(pair);
+        } else {
+            list<Node>& bucket = container[get_bucket_index(key_val.first)];
+            bucket.push_back(Node(key_val));
+            pointers.push_back(&bucket.back());
+            auto end_pointer = pointers.end();
+            bucket.back().iterator_to_pointer = --end_pointer;
+            ++_size;
         }
     }
 
     struct const_iterator;
+
     struct iterator {
         typename list<Node*>::iterator it;
         iterator() = default;
-        explicit iterator(
-                const typename list<Node*>::iterator& i) : it(i) {}
+        explicit iterator(const typename list<Node*>::iterator& i) : it(i) {}
 
         iterator operator++() {
             ++it;
             return *this;
         }
+
         iterator operator++(int) {
             iterator i = *this;
             operator++();
@@ -109,21 +114,25 @@ class HashMap {
         }
 
         pair<const KeyType, ValueType>& operator*() const {
-            return (**it).p;
+            return (**it).key_val;
         }
+
         pair<const KeyType, ValueType>* operator->() const {
-            return &(**it).p;
+            return &(**it).key_val;
         }
 
         bool operator==(const const_iterator& i) const {
             return it == i.it;
         }
+
         bool operator==(const iterator& i) const {
             return it == i.it;
         }
+
         bool operator!=(const const_iterator& i) const {
             return !operator==(i);
         }
+
         bool operator!=(const iterator& i) const {
             return !operator==(i);
         }
@@ -139,6 +148,7 @@ class HashMap {
             ++it;
             return *this;
         }
+
         const_iterator operator++(int) {
             const_iterator i = *this;
             operator++();
@@ -146,69 +156,70 @@ class HashMap {
         }
 
         const pair<const KeyType, ValueType>& operator*() const {
-            return (**it).p;
+            return (**it).key_val;
         }
+
         const pair<const KeyType, ValueType>* operator->() const {
-            return &(**it).p;
+            return &(**it).key_val;
         }
 
         bool operator==(const const_iterator& i) const {
             return it == i.it;
         }
+
         bool operator==(const iterator& i) const {
             return it == i.it;
         }
+
         bool operator!=(const const_iterator& i) const {
             return !operator==(i);
         }
+
         bool operator!=(const iterator& i) const {
             return !operator==(i);
         }
     };
 
-    iterator begin() noexcept {
-        return iterator(pointers.begin());
-    }
-    iterator end() noexcept {
-        return iterator(pointers.end());
-    }
+    iterator begin() noexcept { return iterator(pointers.begin()); }
+
+    iterator end() noexcept { return iterator(pointers.end()); }
 
     const_iterator begin() const noexcept {
         return const_iterator(pointers.begin());
     }
+
     const_iterator end() const noexcept {
         return const_iterator(pointers.end());
     }
 
-    const_iterator find(const KeyType& key) const {
-        if (Capacity == 0)
+    iterator find(const KeyType& key) {
+        if (capacity == 0)
             return end();
-        size_t cell = h(key);
-        for (auto i = container[cell].begin(); i != container[cell].end(); ++i)
-            if ((*i).p.first == key)
-                return const_iterator((*i).ptr);
+        for (const Node& node : container[get_bucket_index(key)])
+            if (node.key_val.first == key)
+                return iterator(node.iterator_to_pointer);
         return end();
     }
 
-    iterator find(const KeyType& key) {
-        if (Capacity == 0)
+    const_iterator find(const KeyType& key) const {
+        if (capacity == 0)
             return end();
-        size_t cell = h(key);
-        for (auto i = container[cell].begin(); i != container[cell].end(); ++i)
-            if ((*i).p.first == key)
-                return iterator((*i).ptr);
+        for (const Node& node : container[get_bucket_index(key)])
+            if (node.key_val.first == key)
+                return const_iterator(node.iterator_to_pointer);
         return end();
     }
 
     void erase(const KeyType& key) {
-        if (Capacity == 0)
+        if (capacity == 0)
             return;
-        size_t c = h(key);
-        for (auto i = container[c].begin(); i != container[c].end(); ++i) {
-            if ((*i).p.first == key) {
-                pointers.erase((*i).ptr);
-                container[c].erase(i);
-                --Size;
+
+        list<Node>& bucket = container[get_bucket_index(key)];
+        for (auto i = bucket.begin(); i != bucket.end(); ++i) {
+            if (i -> key_val.first == key) {
+                pointers.erase(i -> iterator_to_pointer);
+                bucket.erase(i);
+                --_size;
                 return;
             }
         }
@@ -222,6 +233,7 @@ class HashMap {
         }
         return (*iter).second;
     }
+
     const ValueType& at(const KeyType& key) const {
         auto iter = find(key);
         if (iter == end())
@@ -229,12 +241,13 @@ class HashMap {
         else
             return (*iter).second;
     }
+
     void clear() {
         vector<pair<const KeyType, ValueType>> allPairs;
         allPairs.reserve(size());
-        for (auto i = begin(); i != end(); ++i)
-            allPairs.push_back(*i);
-        for (const auto& i : allPairs)
-            erase(i.first);
+        for (const auto& pair : *this)
+            allPairs.push_back(pair);
+        for (const auto& pair : allPairs)
+            erase(pair.first);
     }
 };
