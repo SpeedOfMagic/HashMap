@@ -192,22 +192,22 @@ class HashMap {
         return const_iterator(pointers.end());
     }
 
-    iterator find(const KeyType& key) {
+    typename list<Node*>::const_iterator find_node(const KeyType& key) const {
         if (capacity == 0)
-            return end();
+            return pointers.end();
         for (const Node& node : container[get_bucket_index(key)])
             if (node.key_val.first == key)
-                return iterator(node.iterator_to_pointer);
-        return end();
+                return node.iterator_to_pointer;
+        return pointers.end();
+    }
+
+    iterator find(const KeyType& key) {
+        auto result = find_node(key);
+        return iterator(pointers.erase(result, result));
     }
 
     const_iterator find(const KeyType& key) const {
-        if (capacity == 0)
-            return end();
-        for (const Node& node : container[get_bucket_index(key)])
-            if (node.key_val.first == key)
-                return const_iterator(node.iterator_to_pointer);
-        return end();
+        return const_iterator(find_node(key));
     }
 
     void erase(const KeyType& key) {
