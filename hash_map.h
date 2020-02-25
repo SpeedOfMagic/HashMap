@@ -201,9 +201,12 @@ class HashMap {
         return pointers.end();
     }
 
+    typename list<Node*>::iterator remove_const(
+            typename list<Node*>::const_iterator i) {
+        return pointers.erase(i, i);
+    }
     iterator find(const KeyType& key) {
-        auto result = find_node(key);
-        return iterator(pointers.erase(result, result));
+        return iterator(remove_const(find_node(key)));
     }
 
     const_iterator find(const KeyType& key) const {
